@@ -2,53 +2,118 @@ import sys
 import os
 import ctypes
 import signal
+import re
+import subprocess
+import importlib
+
+# -------------------------
+# Utility: Check if pip is available
+# -------------------------
+def has_pip():
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "--version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return True
+    except Exception:
+        return False
+
+# -------------------------
+# Module Import Scanner
+# -------------------------
+def scan_module_imports(directory):
+    found_modules = set()
+    pattern = re.compile(r'^\s*(?:import|from)\s+([a-zA-Z0-9_\.]+)')
+
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.py'):
+                path = os.path.join(root, file)
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            match = pattern.match(line)
+                            if match:
+                                base = match.group(1).split('.')[0]
+                                if base and base not in sys.builtin_module_names:
+                                    found_modules.add(base)
+                except Exception as e:
+                    print(f"Warning: Skipped {path} ({e})")
+
+    return sorted(found_modules)
+
+
+# -------------------------
+# Auto-Installer
+# -------------------------
+def ensure_modules_installed(modules):
+    for module in modules:
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            print(f"[INFO] Missing module '{module}', installing...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+            except subprocess.CalledProcessError:
+                print(f"[ERROR] Failed to install '{module}'")
 
 # -------------------------
 # Admin Check & Elevation
 # -------------------------
 def is_admin():
-    """Return True if the script is running with administrative privileges."""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
     except:
         return False
 
 def run_as_admin():
-    """Relaunch the script with administrative privileges and exit current instance."""
     try:
+        script = os.path.abspath(sys.argv[0])
+        print(f"[DEBUG] Relaunching as admin: {script}")
         ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, " ".join(sys.argv), None, 1
+            None, "runas", sys.executable, f'"{script}"', None, 1
         )
-        os.kill(os.getpid(), signal.SIGTERM)  # Immediately stop current process
-    except:
+        sys.exit(0)
+    except Exception as e:
+        print(f"[ERROR] Failed to elevate: {e}")
         sys.exit(1)
 
 # -------------------------
-# Relaunch with Admin If Needed
+# Main Launcher
 # -------------------------
 if __name__ == "__main__":
-    if not is_admin():
-        run_as_admin()  # Relaunches with elevated rights
+    print("[DEBUG] main.py launched")
 
-    # -------------------------
-    # Prepare Import Paths
-    # -------------------------
     base_dir = os.path.dirname(os.path.abspath(__file__))
     modules_dir = os.path.join(base_dir, 'modules')
     if modules_dir not in sys.path:
         sys.path.insert(0, modules_dir)
 
-    # -------------------------
-    # Load GUI After Elevation
-    # -------------------------
+    # --- Only run pip logic if not frozen ---
+    if not getattr(sys, 'frozen', False) and has_pip():
+        print("[DEBUG] Auto-installing missing dependencies...")
+        scanned = scan_module_imports(modules_dir)
+        ensure_modules_installed(scanned + ['customtkinter'])
+    else:
+        print("[INFO] Skipping auto-install (frozen or pip not available)")
+
+    # --- Now elevate if needed ---
+    if not is_admin():
+        print("[DEBUG] Not admin, elevating...")
+        run_as_admin()
+
+    print("[DEBUG] Running with admin privileges")
+
+    # --- Start GUI ---
     import customtkinter as ctk
     from modules.gui import GUI
 
     root = ctk.CTk()
-    app = GUI(root, is_admin)  # Pass in the is_admin function for internal use
+    app = GUI(root, is_admin)
     root.mainloop()
 
 
+# Build with:
 # pyinstaller --onefile --noconsole --uac-admin --name MAKCU --add-data "assets;assets" --add-data "modules;modules" --add-data "assets/app.manifest;." --add-data "assets/driver;assets/driver" main.py
-
-
