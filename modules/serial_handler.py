@@ -6,6 +6,7 @@ import struct
 
 class SerialHandler:
     KNOWN_DEVICES = [
+        {"vid": "0403", "pid": "6001", "mode": "Normal"},
         {"vid": "1A86", "pid": "55D3", "mode": "Normal"},
         {"vid": "303A", "pid": "0009", "mode": "Flash"},
         {"vid": "303A", "pid": "1001", "mode": "Flash"},
