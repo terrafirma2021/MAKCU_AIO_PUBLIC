@@ -187,3 +187,12 @@ class USBNameChanger:
         except Exception as e:
             self.logger.terminal_print(f"Driver installation error: {e}")
             return False
+
+
+class USBNameChangerFTDI(USBNameChanger):
+    def __init__(self, logger, is_admin_func):
+        super().__init__(logger, is_admin_func)
+        self.vid = 0x0403
+        self.pid = 0x6001
+        self.default_name = "USB Serial Port"
+        self.target_desc = "USB-SERIAL CH340"

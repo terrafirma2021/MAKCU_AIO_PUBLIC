@@ -21,6 +21,15 @@ def has_pip():
         return False
 
 # -------------------------
+# Optional: Upgrade pip
+# -------------------------
+def upgrade_pip():
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+    except Exception as e:
+        print(f"[WARN] Could not upgrade pip: {e}")
+
+# -------------------------
 # Module Import Scanner
 # -------------------------
 def scan_module_imports(directory):
@@ -44,6 +53,14 @@ def scan_module_imports(directory):
 
     return sorted(found_modules)
 
+# -------------------------
+# Module name mapping
+# -------------------------
+PIP_MODULE_MAP = {
+    'win32com': 'pywin32',
+    'pythoncom': 'pywin32',
+    'PIL': 'Pillow',
+}
 
 # -------------------------
 # Auto-Installer
@@ -53,11 +70,12 @@ def ensure_modules_installed(modules):
         try:
             importlib.import_module(module)
         except ImportError:
-            print(f"[INFO] Missing module '{module}', installing...")
+            pip_name = PIP_MODULE_MAP.get(module, module)
+            print(f"[INFO] Missing module '{module}', installing '{pip_name}'...")
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+                subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
             except subprocess.CalledProcessError:
-                print(f"[ERROR] Failed to install '{module}'")
+                print(f"[ERROR] Failed to install '{pip_name}'")
 
 # -------------------------
 # Admin Check & Elevation
@@ -91,28 +109,27 @@ if __name__ == "__main__":
     if modules_dir not in sys.path:
         sys.path.insert(0, modules_dir)
 
-    # --- Only run pip logic if not frozen ---
     if not getattr(sys, 'frozen', False) and has_pip():
         print("[DEBUG] Auto-installing missing dependencies...")
+        upgrade_pip()
         scanned = scan_module_imports(modules_dir)
         ensure_modules_installed(scanned + ['customtkinter'])
     else:
         print("[INFO] Skipping auto-install (frozen or pip not available)")
 
-    # --- Now elevate if needed ---
     if not is_admin():
         print("[DEBUG] Not admin, elevating...")
         run_as_admin()
 
     print("[DEBUG] Running with admin privileges")
 
-    # --- Start GUI ---
     import customtkinter as ctk
     from modules.gui import GUI
 
     root = ctk.CTk()
     app = GUI(root, is_admin)
     root.mainloop()
+
 
 
 # Build with:

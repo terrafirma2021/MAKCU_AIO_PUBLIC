@@ -19,7 +19,7 @@ from .flasher import Flasher
 from .updater import Updater
 from .config_manager import ConfigManager  # New import
 from .utils import get_icon_path, get_main_folder
-from .usb_name_changer import USBNameChanger 
+from .usb_name_changer import USBNameChanger, USBNameChangerFTDI
 from tkinter import messagebox
 
 
@@ -79,10 +79,14 @@ class GUI:
         # Initialize ConfigManager and download config
         self.config_manager = ConfigManager(self.logger, progress_callback=self.update_progress)
         
-        # Initialize USBNameChanger
-        self.usb_changer = USBNameChanger(self.logger, self.is_admin)
+        # Initialize both USB changers (CH343 and FTDI)
+        self.ch343_changer = USBNameChanger(self.logger, self.is_admin)
+        self.ftdi_changer  = USBNameChangerFTDI(self.logger, self.is_admin)
 
-        self.root.after(500, self.usb_changer.ensure_driver_installed)
+        # Schedule driver install only once (CH343 requires it)
+        self.root.after(500, self.ch343_changer.ensure_driver_installed)
+
+        # Still only need one mismatch check (applies to CH340-named devices)
         self.root.after(1500, self._check_ch340_mismatch)
 
 
@@ -555,6 +559,7 @@ class GUI:
         """
         def update_status():
             if self.serial_handler.is_connected:
+                changer = self._active_changer()  # ← Selects CH343 or FTDI
                 if self.serial_handler.current_mode == "Normal":
                     status_color = "#0acc1e"  # Green
                     mode_text = "Normal"
@@ -562,7 +567,7 @@ class GUI:
                     self.makcu_button.grid()
                     self.usb_name_toggle_button.grid()  # Show in Normal mode
 
-                    device_name, com_port = self.usb_changer.get_device_info()
+                    device_name, com_port = changer.get_device_info()
                     if device_name:
                         mcu_status = f"MAKCU Connected in {mode_text} mode on {com_port} {device_name}"
                     else:
@@ -593,6 +598,7 @@ class GUI:
 
         self.root.after(0, update_status)
 
+
     def _install_driver(self):
         """
         Background thread: Installs driver only. Does not modify the device name.
@@ -604,12 +610,14 @@ class GUI:
         self.task_queue.put(self.update_mcu_status)  # UI update safely
         
     def _check_ch340_mismatch(self):
-        device_name, com_port = self.usb_changer.get_device_info()
-        if device_name and com_port and device_name.startswith(self.usb_changer.target_desc):
-            expected = f"{self.usb_changer.target_desc} ({com_port})"
+        changer = self._active_changer()  # ← Selects CH343 or FTDI
+        device_name, com_port = changer.get_device_info()
+        if device_name and com_port and device_name.startswith(changer.target_desc):
+            expected = f"{changer.target_desc} ({com_port})"
             if device_name != expected:
                 self.logger.terminal_print(f"Auto-fixing CH340 name mismatch: {device_name} → {expected}")
-                self.usb_changer.update_registry_name(expected, com_port)
+                changer.update_registry_name(expected, com_port)
+    
 
 
     def _set_custom_name_in_thread(self, new_name):
@@ -634,92 +642,97 @@ class GUI:
             self.logger.terminal_print("Failed to restore original USB name.")
         self.task_queue.put(self.update_mcu_status)
 
-    def toggle_usb_name(self, auto_install_driver=False):
+    def _active_changer(self):
+        """Return whichever USBNameChanger currently has a matching VID/PID on the bus."""
+        for ch in (self.ch343_changer, self.ftdi_changer):
+            if ch.is_device_connected():
+                return ch
+        return self.ch343_changer   # fallback so code paths don’t break
+
+
+    def toggle_usb_name(self, auto_install_driver: bool = False):
         """
-        Toggle between CH343 (default, enumerated by Windows) and CH340 (custom name with COM).
+        Toggle between the adapter's factory name (CH343 or FTDI)
+        and the CH340-style custom name.
         """
         import re
-        device_name, com_port = self.usb_changer.get_device_info()
+
+        changer = self._active_changer()          # ← helper added earlier
+        device_name, com_port = changer.get_device_info()
         if device_name is None:
             self.logger.terminal_print("Device not found. Please insert the device.")
             return
 
-        match = re.match(r"^(.*) \(COM\d+\)$", device_name)
+        # Strip the "(COMxx)" suffix if present
+        match     = re.match(r"^(.*) \(COM\d+\)$", device_name)
         base_name = match.group(1) if match else device_name
 
-        # Determine the operation mode: custom name or reset to default
-        setting_custom_name = base_name == self.usb_changer.default_name
-        restoring_default_name = base_name.startswith(self.usb_changer.target_desc)
+        want_custom  = base_name == changer.default_name      # switch to CH340 style
+        want_restore = base_name.startswith(changer.target_desc)  # back to factory
 
-        if setting_custom_name:
-            warn_text = (
-                "WARNING: This action will assign a *fixed* COM-port value to your device.\n\n"
-                "If Windows later reassigns a different COM port, the name will not update automatically.\n\n"
-                "If the values differ, you will need to manually spoof or reset it.\n"
-                "If you don't understand this, you probably shouldn't proceed.\n\n"
-                "Please open devive manager and scan for hardware changes, or reboot\n"
-                "Click 'No' to cancel."
-            )
+        # ────────────────────────────────────── safety pop-ups ─────────────────────────────────────
+        if want_custom:
             proceed = messagebox.askyesno(
                 title="Static COM-Port Warning",
-                message=warn_text,
-                icon=messagebox.WARNING
+                message=(
+                    "WARNING: This will pin your COM-port inside the FriendlyName.\n"
+                    "If Windows later re-assigns another COM number you must rename it again.\n\n"
+                    "Continue?"
+                ),
+                icon=messagebox.WARNING,
             )
             if not proceed:
-                self.logger.terminal_print("USB‑name change cancelled by user.")
+                self.logger.terminal_print("USB-name change cancelled by user.")
                 return
-        elif restoring_default_name:
+        elif want_restore:
             messagebox.showinfo(
                 title="Device Reconnection Required",
                 message=(
-                    "The device will now be reset to its original name.\n\n"
-                    "Please physically disconnect and reconnect USB2 after this operation,\n"
-                    "so that Windows can re-enumerate it correctly with the default name.\n"
-                    "Please open device manager and scan for hardware changes, or reboot\n"
-                )
+                    "The device will be reset to its original name.\n"
+                    "Unplug and re-plug it afterwards so Windows re-enumerates correctly."
+                ),
             )
 
+        # ────────────────────────────────── privilege / connection checks ──────────────────────────
         if not self.is_admin():
-            response = messagebox.askyesno(
+            if messagebox.askyesno(
                 "Admin Privileges Required",
-                "Name changing requires administrative privileges. "
-                "Restart the application with elevated rights?"
-            )
-            if response:
+                "This action needs admin rights. Restart as Administrator?"
+            ):
                 from main import run_as_admin
                 run_as_admin()
             else:
-                self.logger.terminal_print("Operation cancelled. Admin privileges required.")
-                return
-
-        if not self.serial_handler.is_connected:
-            self.logger.terminal_print("Device not connected. Please connect the device first.")
+                self.logger.terminal_print("Operation cancelled – admin rights required.")
             return
 
-        # Check and auto-correct COM mismatch if already CH340
-        if base_name.startswith(self.usb_changer.target_desc):
-            expected_name = f"{self.usb_changer.target_desc} ({com_port})"
-            if device_name != expected_name:
-                self.logger.terminal_print(
-                    f"Correcting FriendlyName: expected '{expected_name}', got '{device_name}'"
-                )
-                self.usb_changer.update_registry_name(expected_name, com_port)
+        if not self.serial_handler.is_connected:
+            self.logger.terminal_print("Device not connected. Connect first.")
+            return
 
-        if setting_custom_name:
+        # ───────────────────────────────── correct CH340 names already set ─────────────────────────
+        if base_name.startswith(changer.target_desc):
+            expected = f"{changer.target_desc} ({com_port})"
+            if device_name != expected:
+                self.logger.terminal_print(f"Fixing FriendlyName mismatch: {device_name} → {expected}")
+                changer.update_registry_name(expected, com_port)
+
+        # ───────────────────────────────────── perform the toggle ──────────────────────────────────
+        if want_custom:
             threading.Thread(
-                target=self._set_custom_name_in_thread,
-                args=(self.usb_changer.target_desc,),
-                daemon=True
+                target=changer.set_custom_name,
+                args=(changer.target_desc,),
+                daemon=True,
             ).start()
-        elif restoring_default_name:
+
+        elif want_restore:
             threading.Thread(
-                target=self._restore_original_name_thread,
-                daemon=True
+                target=changer.restore_original_name,
+                daemon=True,
             ).start()
+
         else:
-            self.logger.terminal_print(
-                f"Device name '{base_name}' not recognized. Toggle skipped."
-            )
+            self.logger.terminal_print(f"Name '{base_name}' not recognised – toggle skipped.")
+
 
 
     def toggle_online_offline(self):

@@ -16,7 +16,7 @@ class Updater:
     """
     PRIMARY_UPDATE_BASE_URL = "https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe"
     FALLBACK_UPDATE_BASE_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe"
-    DEFAULT_VERSION = "2.5"
+    DEFAULT_VERSION = "2.6"
     FIRMWARE_LEFT = "3.2"
     FIRMWARE_RIGHT = "3.2.1"
 
