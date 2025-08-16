@@ -1,0 +1,103 @@
+Logging to file: C:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\log.txt
+Connected to GitHub: 2.60ms  Gitee: 256.77ms
+Current version: '2.7'  Latest version: '2.6'
+
+*** Main Version Changelog ***
+- Welcome all members!
+- https://www.makcu.com
+-  
+- UPDATED: V3.4
+- Fixes: Random crash.
+- Random slow downs
+
+
+You are up to date with firmware.
+
+New version available. Downloading update...
+Main folder: C:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC
+New executable path: C:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Last successful server: github
+Prioritizing GitHub URL: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Attempting download from primary URL: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Starting download from GitHub server: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Downloading files...
+Download config.json: success
+Download complete
+Failed to download from GitHub server: 404 Client Error: Not Found for url: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Primary download failed. Trying fallback URL: https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe
+Starting download from Gitee server: https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe
+Failed to download from Gitee server: 404 Client Error: Not Found for url: https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe
+Failed to download update from both servers. Running current version.
+Logging to file: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\log.txt
+Connected to GitHub: 1.90ms  Gitee: 274.75ms
+Current version: '2.7'  Latest version: '2.6'
+
+*** Main Version Changelog ***
+- Welcome all members!
+- https://www.makcu.com
+-  
+- UPDATED: V3.4
+- Fixes: Random crash.
+- Random slow downs
+
+
+You are up to date with firmware.
+
+New version available. Downloading update...
+Main folder: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC
+New executable path: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Last successful server: github
+Prioritizing GitHub URL: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Attempting download from primary URL: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Starting download from GitHub server: https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe
+Downloading files...
+Download config.json: success
+Download complete
+File size: 40451135 bytes
+Download progress: 10.0% (4046848/40451135 bytes)
+Download progress: 20.0% (8093696/40451135 bytes)
+Download progress: 30.0% (12140544/40451135 bytes)
+Download progress: 40.0% (16187392/40451135 bytes)
+Download progress: 50.0% (20226048/40451135 bytes)
+Download progress: 60.0% (24272896/40451135 bytes)
+Download progress: 70.0% (28319744/40451135 bytes)
+Download progress: 80.0% (32366592/40451135 bytes)
+Download progress: 90.0% (36413440/40451135 bytes)
+Download progress: 100.0% (40451135/40451135 bytes)
+Download completed in 0.14 seconds
+File saved to: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Downloaded file size: 40451135 bytes
+File MD5 hash: 287f042064b1b78f65a2d157526c2a75
+Successfully connected to GitHub server for update.
+Launching new version: MAKCU_2_6.exe
+Normalized path: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Executable permissions verified for: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Executing command: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Exiting current version.
+Logging to file: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\log.txt
+Connected to GitHub: 17.91ms  Gitee: 283.14ms
+Downloading files...
+Download config.json: success
+Download V3.2_RIGHT.bin: success
+Current version: '2.7'  Latest version: '2.6'
+
+*** Main Version Changelog ***
+- Welcome all members!
+- https://www.makcu.com
+-  
+- UPDATED: V3.4
+- Fixes: Random crash.
+- Random slow downs
+
+
+You are up to date with firmware.
+
+New version available. Downloading update...
+Main folder: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC
+New executable path: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Existing versioned file found. Removing: c:\Users\987\Documents\GitHub\MAKCU_AIO_PUBLIC\MAKCU_2_6.exe
+Download V3.2_LEFT.bin: success
+Download complete
+Update check failed: [WinError 5] Access is denied: 'c:\\Users\\987\\Documents\\GitHub\\MAKCU_AIO_PUBLIC\\MAKCU_2_6.exe'
+Saved window position: x=-1115, y=211
+Serial monitoring is not active.
