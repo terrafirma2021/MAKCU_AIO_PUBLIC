@@ -15,6 +15,9 @@ class ConfigManager:
     Handles downloading, storing, and accessing configuration data and firmware BIN files.
     Tracks online/offline state and selects the fastest server (GitHub or Gitee) based on ping latency.
     Downloads config.json and BIN files in the background on initialization.
+    Firmware entries live under the ``firmware`` key and provide ``name``,
+    ``version``, ``changelog``, ``primary_url``, and ``fallback_url`` fields
+    for each side (``left``/``right``).
     """
     PRIMARY_CONFIG_URL = "https://raw.githubusercontent.com/terrafirma2021/MAKCM_v2_files/main/config.json"
     FALLBACK_CONFIG_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/config.json"
@@ -314,11 +317,15 @@ class ConfigManager:
             return None
         urls = self.bin_file_urls.get(filename, {})
         name = filename[:-4] if filename.endswith('.bin') else filename
+        with self.config_lock:
+            firmware_entry = self.config_data.get("firmware", {}).get(side, {})
         return {
             "name": name,
             "filename": filename,
             "primary_url": urls.get("primary"),
             "fallback_url": urls.get("fallback"),
+            "version": firmware_entry.get("version"),
+            "changelog": firmware_entry.get("changelog", []),
         }
 
     def get_firmware_urls(self, side):
