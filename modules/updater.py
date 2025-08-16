@@ -13,6 +13,9 @@ class Updater:
     """
     Handles checking for updates and applying them.
     Uses ConfigManager for online status and server prioritization.
+    Firmware details are provided via ConfigManager's ``firmware`` entries,
+    each containing ``name``, ``version``, ``changelog``, ``primary_url``,
+    and ``fallback_url`` for both ``left`` and ``right`` sides.
     """
     PRIMARY_UPDATE_BASE_URL = "https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe"
     FALLBACK_UPDATE_BASE_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe"
@@ -34,7 +37,7 @@ class Updater:
         def task():
             try:
                 # Get currently bundled firmware versions before refresh
-                current_fw = self.config_manager.get_config_value("firmware_version", {})
+                current_fw = self.config_manager.get_config_value("firmware", {})
                 current_firmware_left = current_fw.get("left", {}).get("version", "")
                 current_firmware_right = current_fw.get("right", {}).get("version", "")
 
@@ -51,11 +54,8 @@ class Updater:
                 # Retrieve latest version and firmware from config
                 latest_version = self.config_manager.get_config_value("version")
                 main_changelog = self.config_manager.get_config_value("main_aio_changelog", [])
-                latest_firmware = self.config_manager.get_config_value("firmware_version", {})
-                latest_firmware_left = latest_firmware.get("left", {})
-                latest_firmware_right = latest_firmware.get("right", {})
-                left_info = self.config_manager.get_firmware_info("left")
-                right_info = self.config_manager.get_firmware_info("right")
+                left_info = self.config_manager.get_firmware_info("left") or {}
+                right_info = self.config_manager.get_firmware_info("right") or {}
 
                 if not latest_version:
                     self.logger.terminal_print("Latest version not specified in configuration.")
@@ -77,25 +77,23 @@ class Updater:
                 # Check firmware versions
                 firmware_update_needed = False
 
-                if self.is_different_version(latest_firmware_left.get("version", ""), current_firmware_left):
+                if left_info and self.is_different_version(left_info.get("version", ""), current_firmware_left):
                     self.logger.terminal_print("\n*** Left firmware is available ***")
-                    self.logger.terminal_print(f"Version: {latest_firmware_left.get('version', 'Unknown')}")
-                    if left_info:
-                        self.logger.terminal_print(f"File: {left_info['filename']}")
+                    self.logger.terminal_print(f"Version: {left_info.get('version', 'Unknown')}")
+                    self.logger.terminal_print(f"File: {left_info['filename']}")
                     self.logger.terminal_print("Changelog:")
-                    for change in latest_firmware_left.get("changelog", []):
+                    for change in left_info.get("changelog", []):
                         self.logger.terminal_print(f"- {change}\n")
                     firmware_update_needed = True
                     if self.flasher:
                         self.flasher.download_and_flash("left")
 
-                if self.is_different_version(latest_firmware_right.get("version", ""), current_firmware_right):
+                if right_info and self.is_different_version(right_info.get("version", ""), current_firmware_right):
                     self.logger.terminal_print("\n*** Right firmware is available ***")
-                    self.logger.terminal_print(f"Version: {latest_firmware_right.get('version', 'Unknown')}")
-                    if right_info:
-                        self.logger.terminal_print(f"File: {right_info['filename']}")
+                    self.logger.terminal_print(f"Version: {right_info.get('version', 'Unknown')}")
+                    self.logger.terminal_print(f"File: {right_info['filename']}")
                     self.logger.terminal_print("Changelog:")
-                    for change in latest_firmware_right.get("changelog", []):
+                    for change in right_info.get("changelog", []):
                         self.logger.terminal_print(f"- {change}\n")
                     firmware_update_needed = True
                     if self.flasher:

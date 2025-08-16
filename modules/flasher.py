@@ -10,6 +10,9 @@ class Flasher:
     """
     Handles flashing firmware BIN files using pre-downloaded files when available.
     Falls back to online download if local files are missing.
+    Firmware details are provided by ConfigManager and include ``name``,
+    ``version``, ``changelog``, ``primary_url``, and ``fallback_url`` for
+    each side.
     """
     def __init__(self, logger, serial_handler, config_manager):
         self.logger = logger
