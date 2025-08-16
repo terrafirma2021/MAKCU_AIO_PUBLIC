@@ -114,7 +114,7 @@ class GUI:
         self.main_folder = get_main_folder()
 
         # Create Updater and run check
-        self.updater = Updater(self.logger, self.config_manager)
+        self.updater = Updater(self.logger, self.config_manager, self.flasher)
         self.updater.check_for_updates()
 
         # Start serial monitoring
