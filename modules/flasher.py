@@ -5,7 +5,6 @@ import subprocess
 import time
 import sys
 from modules.utils import get_download_path, get_icon_path
-from config_manager import ConfigManager
 
 class Flasher:
     """
@@ -26,24 +25,28 @@ class Flasher:
         self.is_flashing = False
         self.flashing_lock = threading.Lock()  # Ensure only one flashing process runs at a time
 
-    def download_and_flash(self, bin_filename):
-        """Flash a BIN file, using local copy if available, otherwise download."""
+    def download_and_flash(self, side):
+        """Flash firmware for the specified side, downloading if needed."""
         def task():
+            info = self.config_manager.get_firmware_info(side)
+            if not info:
+                self.logger.terminal_print(f"No firmware information for side: {side}")
+                return
+            bin_filename = info["filename"]
             bin_path = get_download_path(bin_filename)
-            # Check if local file exists and was successfully downloaded
-            if self.config_manager.is_bin_downloaded(bin_filename):
+            if self.config_manager.is_bin_downloaded(info["name"]):
                 self.logger.terminal_print(f"Using pre-downloaded {bin_filename} at {bin_path}")
                 self.flash_firmware(bin_path)
                 return
 
             if not self.config_manager.is_online_status():
-                self.logger.terminal_print(f"Offline mode detected. Cannot download {bin_filename}. Local file missing.")
+                self.logger.terminal_print(
+                    f"Offline mode detected. Cannot download {bin_filename}. Local file missing."
+                )
                 return
 
             try:
-                # Determine URLs based on last successful server
-                primary_url = ConfigManager.PRIMARY_BIN_FILES[bin_filename]
-                fallback_url = ConfigManager.FALLBACK_BIN_FILES[bin_filename]
+                primary_url, fallback_url = info["primary_url"], info["fallback_url"]
                 primary_server = "GitHub"
                 fallback_server = "Gitee"
                 last_successful_server = self.config_manager.get_config_value("last_successful_server")
@@ -52,32 +55,40 @@ class Flasher:
                     primary_server, fallback_server = fallback_server, primary_server
                     self.logger.terminal_print(f"Prioritizing {fallback_server} for {bin_filename}")
 
-                # Download from primary URL
                 response = requests.get(primary_url, stream=True, timeout=10)
                 response.raise_for_status()
                 with open(bin_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                self.logger.terminal_print(f"Downloaded {bin_filename} from {primary_server} to {bin_path}")
-                self.config_manager.set_config_value("last_successful_server", "github")
+                self.logger.terminal_print(
+                    f"Downloaded {bin_filename} from {primary_server} to {bin_path}"
+                )
+                self.config_manager.set_config_value("last_successful_server", primary_server.lower())
                 self.config_manager.set_config_value("is_online", True)
                 self.flash_firmware(bin_path)
 
             except requests.RequestException as e:
-                self.logger.terminal_print(f"Failed to download {bin_filename} from {primary_server}: {e}")
+                self.logger.terminal_print(
+                    f"Failed to download {bin_filename} from {primary_server}: {e}"
+                )
                 try:
-                    # Try fallback URL
                     response = requests.get(fallback_url, stream=True, timeout=10)
                     response.raise_for_status()
                     with open(bin_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
-                    self.logger.terminal_print(f"Downloaded {bin_filename} from {fallback_server} to {bin_path}")
-                    self.config_manager.set_config_value("last_successful_server", "gitee")
+                    self.logger.terminal_print(
+                        f"Downloaded {bin_filename} from {fallback_server} to {bin_path}"
+                    )
+                    self.config_manager.set_config_value(
+                        "last_successful_server", fallback_server.lower()
+                    )
                     self.config_manager.set_config_value("is_online", True)
                     self.flash_firmware(bin_path)
                 except requests.RequestException as e:
-                    self.logger.terminal_print(f"Failed to download {bin_filename} from {fallback_server}: {e}")
+                    self.logger.terminal_print(
+                        f"Failed to download {bin_filename} from {fallback_server}: {e}"
+                    )
                     self.config_manager.set_config_value("is_online", False)
 
         threading.Thread(target=task, daemon=True).start()
