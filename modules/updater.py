@@ -17,12 +17,10 @@ class Updater:
     PRIMARY_UPDATE_BASE_URL = "https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe"
     FALLBACK_UPDATE_BASE_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe"
     DEFAULT_VERSION = "2.7"
-    FIRMWARE_LEFT = "3.2"
-    FIRMWARE_RIGHT = "3.4"
-
-    def __init__(self, logger, config_manager):
+    def __init__(self, logger, config_manager, flasher=None):
         self.logger = logger
         self.config_manager = config_manager
+        self.flasher = flasher
         self.main_folder = get_main_folder()
         self.update_check_complete = threading.Event()
         self.is_offline = False
@@ -35,6 +33,11 @@ class Updater:
         """
         def task():
             try:
+                # Get currently bundled firmware versions before refresh
+                current_fw = self.config_manager.get_config_value("firmware_version", {})
+                current_firmware_left = current_fw.get("left", {}).get("version", "")
+                current_firmware_right = current_fw.get("right", {}).get("version", "")
+
                 # Ensure config is downloaded before any checks
                 self.config_manager.wait_until_downloaded()
 
@@ -51,6 +54,8 @@ class Updater:
                 latest_firmware = self.config_manager.get_config_value("firmware_version", {})
                 latest_firmware_left = latest_firmware.get("left", {})
                 latest_firmware_right = latest_firmware.get("right", {})
+                left_info = self.config_manager.get_firmware_info("left")
+                right_info = self.config_manager.get_firmware_info("right")
 
                 if not latest_version:
                     self.logger.terminal_print("Latest version not specified in configuration.")
@@ -58,8 +63,6 @@ class Updater:
                     return
         
                 current_version = self.DEFAULT_VERSION
-                current_firmware_left = self.FIRMWARE_LEFT
-                current_firmware_right = self.FIRMWARE_RIGHT
 
                 # Log version details for debugging
                 self.logger.terminal_print(f"Current version: {current_version!r}  Latest version: {latest_version!r}")
@@ -77,18 +80,26 @@ class Updater:
                 if self.is_different_version(latest_firmware_left.get("version", ""), current_firmware_left):
                     self.logger.terminal_print("\n*** Left firmware is available ***")
                     self.logger.terminal_print(f"Version: {latest_firmware_left.get('version', 'Unknown')}")
+                    if left_info:
+                        self.logger.terminal_print(f"File: {left_info['filename']}")
                     self.logger.terminal_print("Changelog:")
                     for change in latest_firmware_left.get("changelog", []):
                         self.logger.terminal_print(f"- {change}\n")
                     firmware_update_needed = True
+                    if self.flasher:
+                        self.flasher.download_and_flash("left")
 
                 if self.is_different_version(latest_firmware_right.get("version", ""), current_firmware_right):
                     self.logger.terminal_print("\n*** Right firmware is available ***")
                     self.logger.terminal_print(f"Version: {latest_firmware_right.get('version', 'Unknown')}")
+                    if right_info:
+                        self.logger.terminal_print(f"File: {right_info['filename']}")
                     self.logger.terminal_print("Changelog:")
                     for change in latest_firmware_right.get("changelog", []):
                         self.logger.terminal_print(f"- {change}\n")
                     firmware_update_needed = True
+                    if self.flasher:
+                        self.flasher.download_and_flash("right")
 
                 if not firmware_update_needed:
                     self.logger.terminal_print("You are up to date with firmware.\n")
