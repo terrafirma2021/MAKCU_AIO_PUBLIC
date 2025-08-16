@@ -5,6 +5,8 @@ import os
 import time
 import sys
 import hashlib
+import json
+import re
 
 from modules.utils import get_main_folder
 
@@ -19,14 +21,50 @@ class Updater:
     """
     PRIMARY_UPDATE_BASE_URL = "https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe"
     FALLBACK_UPDATE_BASE_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe"
-    DEFAULT_VERSION = "2.7"
     def __init__(self, logger, config_manager, flasher=None):
         self.logger = logger
         self.config_manager = config_manager
         self.flasher = flasher
         self.main_folder = get_main_folder()
+        self.current_version = self._get_current_version()
         self.update_check_complete = threading.Event()
         self.is_offline = False
+
+    def _get_current_version(self):
+        """Determine the version of the currently running build.
+
+        Order of precedence:
+        1. The ``version`` field from the locally bundled ``config.json``.
+           This file is packaged with the executable and reflects the build
+           version at creation time.
+        2. The version embedded in the executable name following the pattern
+           ``MAKCU_<major>_<minor>.exe``.
+        3. Fallback to ``"0.0"`` if no information is available.
+
+        Future releases should ensure either the bundled ``config.json`` has a
+        correct ``version`` field or the executable name encodes the version so
+        this method can resolve the running version reliably.
+        """
+
+        # 1. Try the local config.json
+        config_path = os.path.join(self.main_folder, "config.json")
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                version = str(data.get("version", "")).strip()
+                if version:
+                    return version
+        except Exception:
+            pass
+
+        # 2. Try to parse from executable name
+        exe_name = os.path.basename(sys.argv[0])
+        match = re.search(r"_(\d+_\d+)\.exe$", exe_name, re.IGNORECASE)
+        if match:
+            return match.group(1).replace("_", ".")
+
+        # 3. Unknown version
+        return "0.0"
 
     def check_for_updates(self):
         """
@@ -62,7 +100,7 @@ class Updater:
                     self.update_check_complete.set()
                     return
         
-                current_version = self.DEFAULT_VERSION
+                current_version = self.current_version
 
                 # Log version details for debugging
                 self.logger.terminal_print(f"Current version: {current_version!r}  Latest version: {latest_version!r}")
