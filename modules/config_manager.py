@@ -18,14 +18,6 @@ class ConfigManager:
     """
     PRIMARY_CONFIG_URL = "https://raw.githubusercontent.com/terrafirma2021/MAKCM_v2_files/main/config.json"
     FALLBACK_CONFIG_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/config.json"
-    PRIMARY_BIN_FILES = {
-        "V3.2_LEFT.bin": "https://github.com/terrafirma2021/MAKCM_v2_files/raw/main/V3.2_LEFT.bin",
-        "V3.2_RIGHT.bin": "https://github.com/terrafirma2021/MAKCM_v2_files/raw/main/V3.2_RIGHT.bin"
-    }
-    FALLBACK_BIN_FILES = {
-        "V3.2_LEFT.bin": "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/V3.2_LEFT.bin",
-        "V3.2_RIGHT.bin": "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/V3.2_RIGHT.bin"
-    }
     LOCAL_CONFIG_PATH = os.path.join(get_main_folder(), 'config.json')
     PING_TIMEOUT = 0.5  # 500ms timeout for pings
 
@@ -37,11 +29,14 @@ class ConfigManager:
         self.download_complete = threading.Event()
         self.download_successful = False
         self.is_online = False
-        self.bin_files_downloaded = {filename: False for filename in self.PRIMARY_BIN_FILES}
+        self.bin_file_urls = {}
+        self.side_to_filename = {}
+        self.bin_files_downloaded = {}
         # Select the fastest server based on ping
         self.preferred_server = self._select_fastest_server()
         # Load local config immediately
         self.load_local_config()
+        self._parse_firmware_info()
         # Start background download of config and BIN files
         threading.Thread(target=self.download_all_files, daemon=True).start()
         
@@ -124,6 +119,26 @@ class ConfigManager:
                         self.is_online = self.config_data.get("is_online", False)
             except Exception:
                 pass
+
+    def _parse_firmware_info(self):
+        """Build dictionaries of firmware filenames and URLs from config data."""
+        firmware = self.config_data.get("firmware", {})
+        self.bin_file_urls = {}
+        self.side_to_filename = {}
+        self.bin_files_downloaded = {}
+        for side, info in firmware.items():
+            name = info.get("name")
+            primary_url = info.get("primary_url")
+            fallback_url = info.get("fallback_url")
+            if not name or not primary_url or not fallback_url:
+                continue
+            filename = f"{name}.bin" if not name.endswith('.bin') else name
+            self.bin_file_urls[filename] = {
+                "primary": primary_url,
+                "fallback": fallback_url,
+            }
+            self.side_to_filename[side] = filename
+            self.bin_files_downloaded[filename] = self._is_valid_file(get_download_path(filename))
 
     def _is_valid_file(self, filepath):
         """Check if a file exists and is non-empty."""
@@ -216,6 +231,7 @@ class ConfigManager:
                         self.config_data["last_successful_server"] = server.lower()
                         if current_window_position:
                             self.config_data["window_position"] = current_window_position
+                    self._parse_firmware_info()
                     self.save_config_to_file()
                     if self.progress_callback:
                         self.progress_callback("config.json", "success")
@@ -227,20 +243,19 @@ class ConfigManager:
                 with self.config_lock:
                     self.is_online = False
                     self.config_data["is_online"] = False
+                self._parse_firmware_info()
                 self.save_config_to_file()
                 if self.progress_callback:
                     self.progress_callback("config.json", "failed")
 
             # Download BIN files
             tasks = []
-            for filename in self.PRIMARY_BIN_FILES:
-                primary_url = self.PRIMARY_BIN_FILES[filename]
-                fallback_url = self.FALLBACK_BIN_FILES[filename]
-                tasks.append(self.download_file_async(session, filename, primary_url, fallback_url))
+            for filename, urls in self.bin_file_urls.items():
+                tasks.append(self.download_file_async(session, filename, urls["primary"], urls["fallback"]))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
             with self.config_lock:
-                for filename, result in zip(self.PRIMARY_BIN_FILES.keys(), results):
+                for filename, result in zip(self.bin_file_urls.keys(), results):
                     if isinstance(result, str):
                         self.bin_files_downloaded[filename] = True
                         self.config_data["last_successful_server"] = result
@@ -292,7 +307,29 @@ class ConfigManager:
         with self.config_lock:
             return self.is_online
 
-    def is_bin_downloaded(self, filename):
-        """Check if a BIN file has been downloaded."""
+    def get_firmware_info(self, side):
+        """Return firmware info dict for a given side."""
+        filename = self.side_to_filename.get(side)
+        if not filename:
+            return None
+        urls = self.bin_file_urls.get(filename, {})
+        name = filename[:-4] if filename.endswith('.bin') else filename
+        return {
+            "name": name,
+            "filename": filename,
+            "primary_url": urls.get("primary"),
+            "fallback_url": urls.get("fallback"),
+        }
+
+    def get_firmware_urls(self, side):
+        """Return primary and fallback URLs for a given side."""
+        info = self.get_firmware_info(side)
+        if not info:
+            return None, None
+        return info["primary_url"], info["fallback_url"]
+
+    def is_bin_downloaded(self, name):
+        """Check if a BIN file (by base name) has been downloaded."""
+        filename = f"{name}.bin" if not name.endswith('.bin') else name
         bin_path = get_download_path(filename)
         return self._is_valid_file(bin_path) and self.bin_files_downloaded.get(filename, False)

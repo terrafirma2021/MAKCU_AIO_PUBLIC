@@ -804,21 +804,18 @@ class GUI:
         """
         Handle flashing for left or right direction, using pre-downloaded or online files.
         """
-        filename_map = {
-            'left': next((key for key in self.config_manager.PRIMARY_BIN_FILES.keys() if 'LEFT' in key.upper()), None),
-            'right': next((key for key in self.config_manager.PRIMARY_BIN_FILES.keys() if 'RIGHT' in key.upper()), None)
-        }
-        filename = filename_map.get(direction)
-        if not filename:
+        info = self.config_manager.get_firmware_info(direction)
+        if not info:
             self.logger.terminal_print(f"No firmware file found for direction: {direction}")
             return
+        filename = info["filename"]
 
         if self.updater.is_offline or not self.config_manager.is_online_status():
             self.logger.terminal_print("Offline mode detected. Please select your .bin file.")
             self.offline_flash_dialog()
         else:
             self.logger.terminal_print(f"Attempting to flash {filename}")
-            self.flasher.download_and_flash(filename)
+            self.flasher.download_and_flash(direction)
 
     def offline_flash_dialog(self):
         """
