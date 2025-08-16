@@ -15,9 +15,10 @@ class ConfigManager:
     Handles downloading, storing, and accessing configuration data and firmware BIN files.
     Tracks online/offline state and selects the fastest server (GitHub or Gitee) based on ping latency.
     Downloads config.json and BIN files in the background on initialization.
-    Firmware entries live under the ``firmware`` key and provide ``name``,
-    ``version``, ``changelog``, ``primary_url``, and ``fallback_url`` fields
-    for each side (``left``/``right``).
+    Firmware entries live under the ``firmware`` key and provide ``version``,
+    ``changelog``, ``primary_url``, and ``fallback_url`` fields for each side
+    (``left``/``right``). The filename is derived from the download URL so
+    progress messages reflect the actual file retrieved.
     """
     PRIMARY_CONFIG_URL = "https://raw.githubusercontent.com/terrafirma2021/MAKCM_v2_files/main/config.json"
     FALLBACK_CONFIG_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/config.json"
@@ -130,12 +131,16 @@ class ConfigManager:
         self.side_to_filename = {}
         self.bin_files_downloaded = {}
         for side, info in firmware.items():
-            name = info.get("name")
             primary_url = info.get("primary_url")
             fallback_url = info.get("fallback_url")
-            if not name or not primary_url or not fallback_url:
+            if not primary_url or not fallback_url:
                 continue
-            filename = f"{name}.bin" if not name.endswith('.bin') else name
+
+            # Derive filename from the primary URL so logs match the actual download
+            filename = os.path.basename(primary_url)
+            if not filename.endswith('.bin'):
+                filename += '.bin'
+
             self.bin_file_urls[filename] = {
                 "primary": primary_url,
                 "fallback": fallback_url,
