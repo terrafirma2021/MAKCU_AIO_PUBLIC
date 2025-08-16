@@ -800,22 +800,27 @@ class GUI:
         else:
             self.logger.terminal_print("File does not exist.")
 
-    def handle_flash(self, direction):
+    def handle_flash(self, firmware_key):
         """
-        Handle flashing for left or right direction, using pre-downloaded or online files.
+        Handle flashing for the specified side or firmware key, using pre-downloaded
+        or online files.
         """
-        info = self.config_manager.get_firmware_info(direction)
+        info = self.config_manager.get_firmware_info(firmware_key)
         if not info:
-            self.logger.terminal_print(f"No firmware file found for direction: {direction}")
+            self.logger.terminal_print(
+                f"No firmware file found for direction: {firmware_key}"
+            )
             return
         filename = info["filename"]
 
         if self.updater.is_offline or not self.config_manager.is_online_status():
-            self.logger.terminal_print("Offline mode detected. Please select your .bin file.")
+            self.logger.terminal_print(
+                "Offline mode detected. Please select your .bin file."
+            )
             self.offline_flash_dialog()
         else:
             self.logger.terminal_print(f"Attempting to flash {filename}")
-            self.flasher.download_and_flash(direction)
+            self.flasher.download_and_flash(firmware_key)
 
     def offline_flash_dialog(self):
         """

@@ -25,12 +25,14 @@ class Flasher:
         self.is_flashing = False
         self.flashing_lock = threading.Lock()  # Ensure only one flashing process runs at a time
 
-    def download_and_flash(self, side):
-        """Flash firmware for the specified side, downloading if needed."""
+    def download_and_flash(self, firmware_key):
+        """Flash firmware for the specified side or firmware key, downloading if needed."""
         def task():
-            info = self.config_manager.get_firmware_info(side)
+            info = self.config_manager.get_firmware_info(firmware_key)
             if not info:
-                self.logger.terminal_print(f"No firmware information for side: {side}")
+                self.logger.terminal_print(
+                    f"No firmware information for side: {firmware_key}"
+                )
                 return
             bin_filename = info["filename"]
             bin_path = get_download_path(bin_filename)
@@ -46,7 +48,9 @@ class Flasher:
                 return
 
             try:
-                primary_url, fallback_url = info["primary_url"], info["fallback_url"]
+                primary_url, fallback_url = self.config_manager.get_firmware_urls(
+                    firmware_key
+                )
                 primary_server = "GitHub"
                 fallback_server = "Gitee"
                 last_successful_server = self.config_manager.get_config_value("last_successful_server")
