@@ -26,10 +26,10 @@
     "config": {
         "init_files": 1
     },
-    "is_online": false,
+    "is_online": true,
     "last_successful_server": "github",
     "window_position": {
-        "x": -1115,
-        "y": 211
+        "x": -910,
+        "y": 107
     }
 }
