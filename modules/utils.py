@@ -1,89 +1,123 @@
+# modules/utils.py
+
 import os
 import sys
-import shutil
+from pathlib import Path
 
-def get_main_folder():
+# ─────────────────────────────────────────────────────────────────────────────
+# PyInstaller-safe path helpers
+#  - NO copying from sys._MEIPASS to a temp folder (slow & fragile).
+#  - Read bundled resources directly from the unpack dir (sys._MEIPASS).
+#  - Write/download only next to the EXE (or project root in dev).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _is_frozen() -> bool:
+    """True when running under PyInstaller onefile/onedir."""
+    return bool(getattr(sys, "frozen", False)) and hasattr(sys, "_MEIPASS")
+
+
+def app_dir() -> Path:
     """
-    Returns the base folder:
-    - If frozen, uses the same path as the executable.
-    - If running as a script, uses the directory containing 'main.py'.
+    Directory where we want to WRITE things (logs, downloads, etc.).
+    - Frozen: folder containing the EXE.
+    - Dev:    project root (2 levels up from this file: modules/utils.py).
     """
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        return os.path.dirname(os.path.abspath(sys.argv[0]))
+    if _is_frozen():
+        return Path(sys.executable).resolve().parent
+    # Adjust if your repo layout differs; this assumes modules/utils.py
+    return Path(__file__).resolve().parent.parent
 
-def setup_custom_temp_folder():
+
+def bundle_dir() -> Path:
     """
-    Ensures resources are extracted to a `temp` folder next to the executable
-    when running as a PyInstaller-packed executable.
+    Directory where READ-only bundled resources live.
+    - Frozen: PyInstaller unpack dir (sys._MEIPASS).
+    - Dev:    project root (same as app_dir()).
     """
-    base_folder = get_main_folder()
-    temp_dir = os.path.join(base_folder, 'temp')
+    if _is_frozen():
+        return Path(sys._MEIPASS)  # nosec - runtime extraction dir
+    return app_dir()
 
-    if not os.path.exists(temp_dir):
-        os.makedirs(temp_dir, exist_ok=True)
 
-    if getattr(sys, 'frozen', False):
-        pyinstaller_temp = sys._MEIPASS
-        for item in os.listdir(pyinstaller_temp):
-            src = os.path.join(pyinstaller_temp, item)
-            dst = os.path.join(temp_dir, item)
-            if os.path.isdir(src):
-                if not os.path.exists(dst):
-                    shutil.copytree(src, dst)
-            else:
-                shutil.copy2(src, dst)
-
-    return temp_dir
-
-def get_download_path(filename):
+def get_main_folder() -> str:
     """
-    Returns the path where downloaded files should be stored.
-    Uses `temp` when frozen, or the base folder otherwise.
+    Kept for backward compatibility with existing calls.
+    Returns the folder we consider the app base (where we write files).
     """
-    if getattr(sys, 'frozen', False):
-        temp_folder = setup_custom_temp_folder()
-        return os.path.join(temp_folder, filename)
-    else:
-        base_folder = get_main_folder()
-        return os.path.join(base_folder, filename)
+    return str(app_dir())
 
-def get_icon_path(filename):
+
+def ensure_dir(p: Path) -> None:
+    """Create parent directory for a file path, if needed."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+
+def resource_path(rel: str) -> str:
     """
-    Returns the full path to an icon or resource file.
-    Handles both script and PyInstaller-packed executable paths, unpacking into `temp`.
+    Build an absolute path to a bundled resource that was included via --add-data.
+    Example:
+        icon = resource_path("assets/icons/app.ico")
+        driver = resource_path("assets/driver/CH343S64.SYS")
     """
-    if getattr(sys, 'frozen', False):
-        temp_folder = setup_custom_temp_folder()
-        base_path = os.path.join(temp_folder, 'assets')
-    else:
-        base_path = os.path.join(get_main_folder(), 'assets')
+    abs_path = (bundle_dir() / rel).resolve()
+    if not abs_path.exists():
+        # Helpful error with both attempted location and frozen status
+        raise FileNotFoundError(
+            f"Bundled resource not found: {abs_path}\n"
+            f"(frozen={_is_frozen()}, bundle_dir={bundle_dir()})"
+        )
+    return str(abs_path)
 
-    resource_path = os.path.join(base_path, filename)
 
-    if not os.path.exists(resource_path):
-        raise FileNotFoundError(f"Resource not found: {resource_path}")
-
-    return resource_path
-
-def get_driver_path(filename=None):
+def get_download_path(filename: str) -> str:
     """
-    Returns the full path to the driver directory or a specific driver file.
+    Place downloaded/created files alongside the EXE (or project root in dev),
+    under a dedicated 'downloads' folder.
     """
-    if getattr(sys, 'frozen', False):
-        temp_folder = setup_custom_temp_folder()
-        base_path = os.path.join(temp_folder, 'assets', 'driver')
-    else:
-        base_path = os.path.join(get_main_folder(), 'assets', 'driver')
+    target = (app_dir() / "downloads" / filename).resolve()
+    ensure_dir(target)
+    return str(target)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Convenience wrappers used throughout the codebase
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_icon_path(filename: str) -> str:
+    """
+    Return full path to an icon or any file inside /assets when bundled.
+    Example: get_icon_path("app.ico") -> <bundle>/assets/app.ico
+    """
+    return resource_path(str(Path("assets") / filename))
+
+
+def get_driver_path(filename: str | None = None) -> str:
+    """
+    Return full path to driver directory or a specific driver file inside /assets/driver.
+    Example:
+        get_driver_path() -> <bundle>/assets/driver
+        get_driver_path("CH343S64.SYS") -> <bundle>/assets/driver/CH343S64.SYS
+    """
+    base = Path("assets") / "driver"
     if filename:
-        full_path = os.path.join(base_path, filename)
-        if not os.path.exists(full_path):
-            raise FileNotFoundError(f"Driver file not found: {full_path}")
-        return full_path
+        return resource_path(str(base / filename))
+    # Return the directory path (ensure it exists)
+    dir_path = (bundle_dir() / base).resolve()
+    if not dir_path.exists():
+        raise FileNotFoundError(
+            f"Driver folder not found: {dir_path}\n"
+            f"(frozen={_is_frozen()}, bundle_dir={bundle_dir()})"
+        )
+    return str(dir_path)
 
-    if not os.path.exists(base_path):
-        raise FileNotFoundError(f"Driver folder not found: {base_path}")
 
-    return base_path
+# ─────────────────────────────────────────────────────────────────────────────
+# Backward-compat shims (if something still imports these names)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def setup_custom_temp_folder() -> str:
+    """
+    Deprecated: copying sys._MEIPASS content into a custom temp dir is unnecessary.
+    Kept only to avoid crashes if older code calls it. Returns bundle_dir().
+    """
+    return str(bundle_dir())

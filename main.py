@@ -134,3 +134,5 @@ if __name__ == "__main__":
 
 # Build with:
 # pyinstaller --onefile --noconsole --uac-admin --name MAKCU --add-data "assets;assets" --add-data "modules;modules" --add-data "assets/app.manifest;." --add-data "assets/driver;assets/driver" main.py
+
+# $cfg='https://raw.githubusercontent.com/terrafirma2021/MAKCM_v2_files/main/config.json'; $ge='https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/config.json'; try{$j=Invoke-RestMethod -Uri $cfg -TimeoutSec 15 -ErrorAction Stop}catch{ try{$j=Invoke-RestMethod -Uri $ge -TimeoutSec 15 -ErrorAction Stop}catch{Write-Error "Failed to download config.json"; exit 1}} $n=if($j.aio -and $j.aio.name){[string]$j.aio.name}elseif($j.version){'MAKCU_V'+$j.version+'.exe'}else{'MAKCU.exe'}; $base=[IO.Path]::GetFileNameWithoutExtension($n); $i=1; do{$final="$base`_$i"; $i++}while(Test-Path ".\dist\$final.exe"); Write-Host "Building as: $final.exe"; pyinstaller --onefile --noconsole --uac-admin --name $final --add-data "assets;assets" --add-data "modules;modules" --add-data "assets/app.manifest;." --add-data "assets/driver;assets/driver" main.py
