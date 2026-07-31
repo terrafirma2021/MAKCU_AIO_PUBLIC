@@ -142,28 +142,46 @@ class ConfigManager:
                 self.progress_callback(filename, "skipped")
             return self.config_data.get("last_successful_server", "github")
 
-        @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
         async def fetch(url):
-            async with session.get(url, timeout=10) as resp:
-                resp.raise_for_status()
-                with open(bin_path, 'wb') as f:
-                    async for chunk in resp.content.iter_chunked(8192):
-                        f.write(chunk)
-            return True
+            def download():
+                partial_path = f"{bin_path}.part"
+                try:
+                    response = requests.get(url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    with open(partial_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    if not self._is_valid_file(partial_path):
+                        raise IOError("downloaded file is empty")
+                    os.replace(partial_path, bin_path)
+                except Exception:
+                    if os.path.exists(partial_path):
+                        os.remove(partial_path)
+                    raise
+
+            return await asyncio.to_thread(download)
 
         urls = [(primary_url, "GitHub"), (fallback_url, "Gitee")]
         if self.preferred_server == "Gitee":
             urls.reverse()
 
+        last_error = None
         for url, server in urls:
-            try:
-                await fetch(url)
-                if self.progress_callback:
-                    self.progress_callback(filename, "success")
-                return server.lower()
-            except Exception:
-                if self.progress_callback:
-                    self.progress_callback(filename, "failed")
+            for attempt in range(3):
+                try:
+                    await fetch(url)
+                    if self.progress_callback:
+                        self.progress_callback(filename, "success")
+                    return server.lower()
+                except Exception as exc:
+                    last_error = exc
+                    if attempt < 2:
+                        await asyncio.sleep(2)
+
+        if self.progress_callback:
+            self.progress_callback(filename, "failed")
+        self.logger.terminal_print(f"Firmware download failed for {filename}: {last_error}")
         return None
 
     async def download_all_files_async(self):

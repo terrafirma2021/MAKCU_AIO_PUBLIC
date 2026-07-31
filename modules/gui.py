@@ -31,7 +31,7 @@ class GUI:
         Initialize the GUI.
         """
         self.root = root
-        self.root.title("MAKCU v2.8")
+        self.root.title("MAKCU v2.9")
         self.root.resizable(True, True)
         self.root.minsize(800, 600)
         self.root.overrideredirect(True)

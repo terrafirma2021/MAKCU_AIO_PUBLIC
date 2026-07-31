@@ -103,11 +103,6 @@ class Updater:
         """
         def task():
             try:
-                # Get currently bundled firmware versions before refresh
-                current_fw = self.config_manager.get_config_value("firmware", {})
-                current_firmware_left = current_fw.get("left", {}).get("version", "")
-                current_firmware_right = current_fw.get("right", {}).get("version", "")
-
                 # Ensure config is downloaded before any checks
                 self.config_manager.wait_until_downloaded()
 
@@ -129,8 +124,6 @@ class Updater:
                 main_changelog = self.config_manager.get_config_value(
                     "main_aio_changelog", aio_info.get("changelog", [])
                 )
-                left_info = self.config_manager.get_firmware_info("left") or {}
-                right_info = self.config_manager.get_firmware_info("right") or {}
 
                 if not latest_version:
                     self.logger.terminal_print("Latest version not specified in configuration.")
@@ -145,37 +138,14 @@ class Updater:
                 # Always print main version changelog
                 self.logger.terminal_print("\n*** Main Version Changelog ***")
                 for item in main_changelog:
-                    for change in item.get("changes", []):
+                    changes = item.get("changes", []) if isinstance(item, dict) else [item]
+                    for change in changes:
                         self.logger.terminal_print(f"- {change}")
                 self.logger.terminal_print("\n")
 
-                # Check firmware versions
-                firmware_update_needed = False
-
-                if left_info and self.is_different_version(left_info.get("version", ""), current_firmware_left):
-                    self.logger.terminal_print("\n*** Left firmware is available ***")
-                    self.logger.terminal_print(f"Version: {left_info.get('version', 'Unknown')}")
-                    self.logger.terminal_print(f"File: {left_info['filename']}")
-                    self.logger.terminal_print("Changelog:")
-                    for change in left_info.get("changelog", []):
-                        self.logger.terminal_print(f"- {change}\n")
-                    firmware_update_needed = True
-                    if self.flasher:
-                        self.flasher.download_and_flash("left")
-
-                if right_info and self.is_different_version(right_info.get("version", ""), current_firmware_right):
-                    self.logger.terminal_print("\n*** Right firmware is available ***")
-                    self.logger.terminal_print(f"Version: {right_info.get('version', 'Unknown')}")
-                    self.logger.terminal_print(f"File: {right_info['filename']}")
-                    self.logger.terminal_print("Changelog:")
-                    for change in right_info.get("changelog", []):
-                        self.logger.terminal_print(f"- {change}\n")
-                    firmware_update_needed = True
-                    if self.flasher:
-                        self.flasher.download_and_flash("right")
-
-                if not firmware_update_needed:
-                    self.logger.terminal_print("You are up to date with firmware.\n")
+                # Firmware downloads are prepared by ConfigManager, but
+                # flashing is always an explicit USB1/USB3 button action.
+                # Never flash either device automatically during startup.
 
                 # Check if the software version is different
                 if self.is_different_version(latest_version, current_version):
