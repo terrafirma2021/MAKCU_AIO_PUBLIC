@@ -174,15 +174,16 @@ class ConfigManager:
         async with aiohttp.ClientSession() as session:
             @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
             async def fetch_config(url):
-                async with session.get(url, timeout=10) as resp:
-                    resp.raise_for_status()
-                    # Accept JSON even if served as text/plain
-                    try:
-                        _ = resp.content_type  # touch for clarity
-                    except Exception:
-                        pass
-                    text = await resp.text(encoding='utf-8')
-                    return json.loads(text)
+                # Use requests for the small config fetch.  It follows the
+                # raw-file redirect and uses the same TLS/HTTP stack as the
+                # updater, which is more reliable in the frozen Windows build
+                # than depending on aiohttp's connector initialization.
+                def request_config():
+                    response = requests.get(url, timeout=15)
+                    response.raise_for_status()
+                    return response.json()
+
+                return await asyncio.to_thread(request_config)
 
             config_urls = [
                 (self.PRIMARY_CONFIG_URL, "GitHub"),
@@ -210,7 +211,8 @@ class ConfigManager:
                         self.progress_callback("config.json", "success")
                     fetched = True
                     break
-                except Exception:
+                except Exception as exc:
+                    self.logger.terminal_print(f"Download config.json from {server} failed: {exc}")
                     continue
 
             if not fetched:

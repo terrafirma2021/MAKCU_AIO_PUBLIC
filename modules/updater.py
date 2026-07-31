@@ -8,7 +8,7 @@ import hashlib
 import json
 import re
 
-from modules.utils import get_main_folder
+from modules.utils import bundle_dir, get_main_folder
 
 
 class Updater:
@@ -19,7 +19,9 @@ class Updater:
     each containing ``name``, ``version``, ``changelog``, ``primary_url``,
     and ``fallback_url`` for both ``left`` and ``right`` sides.
     """
-    PRIMARY_UPDATE_BASE_URL = "https://github.com/terrafirma2021/MAKCM_v2_files/raw/refs/heads/main/MAKCU.exe"
+    # Kept as a compatibility fallback for older config files.  New releases
+    # should always provide the AIO URLs in config.json under ``aio``.
+    PRIMARY_UPDATE_BASE_URL = "https://raw.githubusercontent.com/terrafirma2021/MAKCM_v2_files/main/MAKCU.exe"
     FALLBACK_UPDATE_BASE_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe"
     def __init__(self, logger, config_manager, flasher=None):
         self.logger = logger
@@ -46,16 +48,22 @@ class Updater:
         this method can resolve the running version reliably.
         """
 
-        # 1. Try the local config.json
-        config_path = os.path.join(self.main_folder, "config.json")
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                version = str(data.get("version", "")).strip()
-                if version:
-                    return version
-        except Exception:
-            pass
+        # 1. Try the writable config beside the executable, then the config
+        # bundled into the build.  The latter prevents a freshly built AIO
+        # from treating itself as version 0.0 on first launch.
+        config_paths = [
+            os.path.join(self.main_folder, "config.json"),
+            os.path.join(str(bundle_dir()), "config.json"),
+        ]
+        for config_path in config_paths:
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    version = str(data.get("version", "")).strip()
+                    if version:
+                        return version
+            except Exception:
+                continue
 
         # 2. Try to parse from executable name
         exe_name = os.path.basename(sys.argv[0])
@@ -65,6 +73,27 @@ class Updater:
 
         # 3. Unknown version
         return "0.0"
+
+    @staticmethod
+    def _safe_executable_name(name, version):
+        """Return a safe local filename for a downloaded AIO executable."""
+        candidate = os.path.basename(str(name or "").strip())
+        if not candidate or candidate in (".", ".."):
+            candidate = f"MAKCU_{str(version).replace('.', '_')}.exe"
+        if not candidate.lower().endswith(".exe"):
+            candidate += ".exe"
+        return candidate
+
+    def _get_update_metadata(self):
+        """Read the AIO release metadata, with legacy URL fallbacks."""
+        aio_info = self.config_manager.get_aio_info()
+        latest_version = aio_info.get("version") or self.config_manager.get_config_value("version")
+        latest_version = str(latest_version or "").strip()
+        update_name = self._safe_executable_name(aio_info.get("name"), latest_version)
+        primary_url = aio_info.get("primary_url") or self.PRIMARY_UPDATE_BASE_URL
+        fallback_url = aio_info.get("fallback_url") or self.FALLBACK_UPDATE_BASE_URL
+
+        return aio_info, latest_version, update_name, primary_url, fallback_url
 
     def check_for_updates(self):
         """
@@ -90,8 +119,16 @@ class Updater:
                     return
 
                 # Retrieve latest version and firmware from config
-                latest_version = self.config_manager.get_config_value("version")
-                main_changelog = self.config_manager.get_config_value("main_aio_changelog", [])
+                (
+                    aio_info,
+                    latest_version,
+                    configured_update_name,
+                    configured_primary_url,
+                    configured_fallback_url,
+                ) = self._get_update_metadata()
+                main_changelog = self.config_manager.get_config_value(
+                    "main_aio_changelog", aio_info.get("changelog", [])
+                )
                 left_info = self.config_manager.get_firmware_info("left") or {}
                 right_info = self.config_manager.get_firmware_info("right") or {}
 
@@ -144,7 +181,16 @@ class Updater:
                 if self.is_different_version(latest_version, current_version):
                     self.logger.terminal_print("New version available. Downloading update...")
 
-                    new_exe_name = f"MAKCU_{latest_version.replace('.', '_')}.exe"
+                    new_exe_name = configured_update_name
+                    running_path = os.path.abspath(
+                        sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
+                    )
+                    candidate_path = os.path.abspath(os.path.join(self.main_folder, new_exe_name))
+                    if os.path.normcase(candidate_path) == os.path.normcase(running_path):
+                        # Never remove or overwrite the executable that is
+                        # currently running.  This matters when the published
+                        # artifact is intentionally named MAKCU.exe.
+                        new_exe_name = f"MAKCU_{latest_version.replace('.', '_')}.exe"
                     new_exe_path = os.path.join(self.main_folder, new_exe_name)
 
                     # Log the main folder and new executable path for debugging
@@ -157,8 +203,8 @@ class Updater:
                         os.remove(new_exe_path)
 
                     # Determine which URL to try first based on last successful server
-                    primary_url = self.PRIMARY_UPDATE_BASE_URL
-                    fallback_url = self.FALLBACK_UPDATE_BASE_URL
+                    primary_url = configured_primary_url
+                    fallback_url = configured_fallback_url
                     primary_server = "GitHub"
                     fallback_server = "Gitee"
                     last_successful_server = self.config_manager.get_config_value("last_successful_server")

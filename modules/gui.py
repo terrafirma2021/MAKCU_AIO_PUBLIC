@@ -31,7 +31,7 @@ class GUI:
         Initialize the GUI.
         """
         self.root = root
-        self.root.title("MAKCU v2.1")
+        self.root.title("MAKCU v2.8")
         self.root.resizable(True, True)
         self.root.minsize(800, 600)
         self.root.overrideredirect(True)
@@ -805,6 +805,16 @@ class GUI:
         Handle flashing for the specified side or firmware key, using pre-downloaded
         or online files.
         """
+        # Offline/manual flashing must not depend on config.json.  A failed
+        # config download leaves no side-to-filename mapping, so resolving the
+        # firmware metadata first used to make both USB flash buttons no-op.
+        if self.is_offline or self.updater.is_offline or not self.config_manager.is_online_status():
+            self.logger.terminal_print(
+                "Offline mode detected. Please select your .bin file."
+            )
+            self.offline_flash_dialog(firmware_key)
+            return
+
         info = self.config_manager.get_firmware_info(firmware_key)
         if not info:
             self.logger.terminal_print(
@@ -813,22 +823,20 @@ class GUI:
             return
         filename = info["filename"]
 
-        if self.updater.is_offline or not self.config_manager.is_online_status():
-            self.logger.terminal_print(
-                "Offline mode detected. Please select your .bin file."
-            )
-            self.offline_flash_dialog()
-        else:
-            self.logger.terminal_print(f"Attempting to flash {filename}")
-            self.flasher.download_and_flash(firmware_key)
+        self.logger.terminal_print(f"Attempting to flash {filename}")
+        self.flasher.download_and_flash(firmware_key)
 
-    def offline_flash_dialog(self):
+    def offline_flash_dialog(self, firmware_key=None):
         """
         Prompts the user for a local .bin firmware file and flashes it.
         """
         self.logger.terminal_print("Offline mode: Select your local firmware .bin file.")
+        side_label = {
+            "left": "USB1",
+            "right": "USB3",
+        }.get(firmware_key, "USB")
         selected_file = filedialog.askopenfilename(
-            title="Select .bin file for flashing",
+            title=f"Select .bin file for {side_label} flashing",
             initialdir=self.main_folder,
             filetypes=[("Firmware Binary", "*.bin"), ("All Files", "*.*")]
         )
