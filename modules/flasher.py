@@ -148,17 +148,36 @@ class Flasher:
             bootloader_warning_detected = False
 
             try:
-                esptool_args = [
+                esptool_base_args = [
                     self.esptool_path,
                     '--chip', 'esp32s3',
                     '--port', self.serial_handler.com_port,
                     '--baud', '921600',
+                ]
+                startupinfo = None
+                if sys.platform.startswith('win'):
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+                self.logger.terminal_print("Formatting flash before writing firmware...")
+                erase_result = subprocess.run(
+                    esptool_base_args + ['erase_flash'],
+                    capture_output=True,
+                    text=True,
+                    shell=False,
+                    startupinfo=startupinfo,
+                )
+                if erase_result.returncode != 0:
+                    error = erase_result.stderr.strip() or erase_result.stdout.strip()
+                    raise RuntimeError(f"Flash format failed: {error or 'esptool exited with an error'}")
+                self.logger.terminal_print("Flash format completed.")
+
+                esptool_args = [
+                    *esptool_base_args,
                     'write_flash', '0x0', bin_path
                 ]
 
                 if sys.platform.startswith('win'):
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                     process = subprocess.Popen(
                         esptool_args,
                         stdout=subprocess.PIPE,
