@@ -7,10 +7,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: release-main
-  cancel-in-progress: false
-
 jobs:
   release:
     runs-on: windows-latest
@@ -31,7 +27,8 @@ jobs:
       - name: Build Windows executable
         shell: pwsh
         run: |
-          python -m PyInstaller --onefile --noconsole --uac-admin --name MAKCU --add-data "assets;assets" --collect-submodules win32com main.py
+          '{"version":"build-${{ github.run_number }}"}' | Set-Content -Path build_version.json -Encoding utf8
+          python -m PyInstaller --onefile --noconsole --uac-admin --name MAKCU --add-data "assets;assets" --add-data "build_version.json;." --collect-submodules win32com main.py
           if (-not (Test-Path 'dist/MAKCU.exe')) { throw 'Build did not produce MAKCU.exe' }
 
       - name: Publish release
@@ -39,4 +36,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" 'dist/MAKCU.exe' --target "${{ github.sha }}" --title "MAKCU build ${{ github.run_number }}" --notes "Built from commit ${{ github.sha }}." --latest
+          $mainSha = gh api "repos/${{ github.repository }}/commits/main" --jq '.sha'
+          $latestFlag = if ($mainSha -eq '${{ github.sha }}') { '--latest' } else { '--latest=false' }
+          gh release create "build-${{ github.run_number }}" 'dist/MAKCU.exe' --target "${{ github.sha }}" --title "MAKCU build ${{ github.run_number }}" --notes "Built from commit ${{ github.sha }}." $latestFlag

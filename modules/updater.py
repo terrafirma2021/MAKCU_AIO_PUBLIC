@@ -23,6 +23,7 @@ class Updater:
     # should always provide the AIO URLs in config.json under ``aio``.
     PRIMARY_UPDATE_BASE_URL = "https://raw.githubusercontent.com/terrafirma2021/MAKCM_v2_files/main/MAKCU.exe"
     FALLBACK_UPDATE_BASE_URL = "https://gitee.com/terrafirma/MAKCM_v2_files/raw/main/MAKCU.exe"
+    LATEST_RELEASE_API = "https://api.github.com/repos/terrafirma2021/MAKCU_AIO_PUBLIC/releases/latest"
     def __init__(self, logger, config_manager, flasher=None):
         self.logger = logger
         self.config_manager = config_manager
@@ -51,6 +52,15 @@ class Updater:
         # 1. Try the writable config beside the executable, then the config
         # bundled into the build.  The latter prevents a freshly built AIO
         # from treating itself as version 0.0 on first launch.
+        build_version_path = os.path.join(str(bundle_dir()), "build_version.json")
+        try:
+            with open(build_version_path, "r", encoding="utf-8") as f:
+                version = str(json.load(f).get("version", "")).strip()
+                if version:
+                    return version
+        except (OSError, ValueError, TypeError):
+            pass
+
         config_paths = [
             os.path.join(self.main_folder, "config.json"),
             os.path.join(str(bundle_dir()), "config.json"),
@@ -87,6 +97,23 @@ class Updater:
     def _get_update_metadata(self):
         """Read the AIO release metadata, with legacy URL fallbacks."""
         aio_info = self.config_manager.get_aio_info()
+        if self.current_version.startswith("build-"):
+            try:
+                response = requests.get(self.LATEST_RELEASE_API, timeout=10)
+                response.raise_for_status()
+                release = response.json()
+                version = str(release["tag_name"]).strip()
+                asset = next(
+                    item for item in release["assets"] if item["name"] == "MAKCU.exe"
+                )
+                url = asset["browser_download_url"]
+                return aio_info, version, "MAKCU.exe", url, url
+            except (requests.RequestException, KeyError, StopIteration, TypeError, ValueError) as e:
+                self.logger.terminal_print(f"Could not check GitHub releases: {e}")
+                # A release build should not downgrade itself to an older
+                # version advertised by the legacy configuration server.
+                return aio_info, self.current_version, "MAKCU.exe", "", ""
+
         latest_version = aio_info.get("version") or self.config_manager.get_config_value("version")
         latest_version = str(latest_version or "").strip()
         update_name = self._safe_executable_name(aio_info.get("name"), latest_version)
@@ -107,7 +134,7 @@ class Updater:
                 self.config_manager.wait_until_downloaded()
 
                 # Check if offline via ConfigManager
-                if not self.config_manager.is_online_status():
+                if not self.config_manager.is_online_status() and not self.current_version.startswith("build-"):
                     self.logger.terminal_print("Offline mode detected via ConfigManager. Skipping update checks.")
                     self.is_offline = True
                     self.update_check_complete.set()
